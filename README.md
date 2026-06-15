@@ -26,7 +26,7 @@ simulator with a Franka Emika Panda arm.
 # Python 3.11 
 conda create -n nesycr python=3.11 -y
 conda activate nesycr
-
+ 
 pip install -r requirements.txt
 pip install -e .
 ```
