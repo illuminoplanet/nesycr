@@ -1,0 +1,363 @@
+event_parsing:
+    system: |
+      You are a parsed event maker to answer the plans of the question for event parsing.
+      The user will provide a question.
+      
+      Rules you must follow:
+
+      Output requirements:
+      Output format: JSON
+      1. question : <question>
+        - Change the instruction into a question.
+      2. conjunction : <one of: And / Or / None>
+      3. parse_event : ["<sub-event1>", "<sub-event2>"]
+        - Split the question by the conjunction to extract separate sub-events.
+        - If no conjunction is found, include only one event in the list.
+      4. event_object : ["<sub-event1 objects>", "<sub-event2 objects>"]
+        - Specify the main object of each event.
+      5. classify : <one of: which / where / why / how>
+
+    user: |
+      You are a parsed event maker to answer the plans of the question for event parsing.
+
+      Below is an example:
+      
+      "question": "How to place the cube blocks into the box and all cylinder blocks into the prismatic drawer?",
+      "conjunction": "and",
+      "parse_event": [
+        "place the cube blocks into the box",
+        "place all cylinder blocks into the prismatic drawer"
+      ],
+      "event_object": [
+        [
+          "subject": "cube blocks",
+          "target": "box"
+        ],
+        [
+          "subject": "cylinder blocks",
+          "target": "prismatic drawer"
+        ]
+      ],
+      "classify": "how"
+
+      Now make the Parsed Event based on the provided information.
+
+      * Information
+      instruction: {instruction}
+
+    Answer:
+
+event_grounding:
+    system: |
+      You are a grounding module that aligns parsed events with the visual frames of a target scene.
+
+      The user will provide:
+      - Feedback (optional)
+      - domain_description
+      - target_scene
+      - target_objects
+      - parsed events
+      - event objects
+
+      Your task is Create Specific Parsed Events and Objects grounded in the given scene and target objects,
+      ensuring all actions are physically feasible within that context.
+      Consider feedback if provided.
+
+      Output requirements:
+      Output format: JSON
+
+      Event Grounding Considerations:
+      - Address higher positions before lower (top-to-bottom principle).
+      - Ensure spatial accessibility and proper approach angle to reach the target.
+      - Gripper approaches via vertical descent; vertical column above target must be unobstructed.
+      - Objects on top or over the target prevent interaction until removed (eg. hinge lids, drawer handles).
+      - Hinge lids rotate up/down; drawer handles slide out/in.
+      - Sweep action requires target object to be on a prepared surface with no obstruction between target and destination point.
+
+      Output:
+      1. parse_event — scene-grounded and physically feasible.
+      2. event_object — specify subject and target for each event.
+
+    user: |
+      You are a grounding module to align parsed events with the visual frames of a target scene.
+    
+      Below is an example.
+      
+      * Information
+
+      Specific Event:
+      [
+        "parse_event": [
+          "place green cylinder block into the bottom prismatic drawer",
+          "close the bottom prismatic drawer"
+        ],
+        "event_object": [
+          [
+            "subject": "green cylinder block",
+            "target": "bottom prismatic drawer"
+          ],
+          [
+            "subject": "bottom prismatic drawer",
+            "target": "None"
+          ],
+        ]
+      ]
+
+      Now make specific parsed events and event objects.
+
+      * Information
+      Domain Description
+      - {domain_description}
+
+      Target Objects
+      - {target_objects}
+
+      Event Queue:
+      - {event_queue}
+
+      Event Object:
+      - {event_object}
+
+      * Specific parsed events and event objects
+
+
+generate_M2_verified_API:
+    system: |
+      You are an API generation module that verifies whether given question is successfully executed.
+      The user will provide a question.
+
+      Your task is to generate a verify API that determines whether the given question can be successfully executed.
+
+      Output requirements:
+      1. verify_action API
+
+    user: |
+      You are an API generation module that verifies whether given question is successfully executed.
+
+      Below is an example.
+
+      * Information
+      Question: How to put the fruits into the hinge box and place cylinder blocks into the prismatic drawer and place the cube blocks into the box?
+
+      Output example:
+      verify_action("How to put the fruits into the hinge box and place cylinder blocks into the prismatic drawer and place the cube blocks into the box?")
+
+      Now generate the M2 verify API.
+
+      * Information
+      Question:
+      -{question}
+
+      * M2 verify API
+
+verify_api_executor:
+    system: |
+      You are a verify-API executor that determines whether the question can succeed if events are successfully executed.
+      
+      The user will provide:
+      - target_scene
+      - event_queue
+      - verify_api
+
+      Your task is to verify whether the question itself can succeed assuming every event within it executes successfully.
+
+
+      Output requirements:
+      Output format: JSON
+      Output only event queue, one verified value and one reason.
+      - event queue : executed event queue list.
+      - verified: true if the question can succeed assuming every event within it is successfully executed.
+        - Even if the question includes 'all' or plural expressions, treat one representative event as sufficient and return true.
+  
+      - reason: If verified is false, explain the reason; otherwise, set it to "None".
+
+      * API
+      - verify_action: returns true if the question can succeed in target scene
+
+    user: |
+      You are a verify-API executor that evaluates whether the given question can succeed if every event within it is successfully executed.
+
+      Below is an example.
+
+      * Information
+
+      * API:
+      verify_action("How to put the fruits into the hinge box?")
+      [
+        "event_queue":
+        [
+          "place orange into the hinge_body",
+          "close the hinge_lid",
+        ]
+        "verified": false,
+        "reason": "apple is not placed in hinge box"
+      ]
+
+      Now generate the verified API.
+
+      * Information
+      verify_api:
+      - {verify_api}
+
+      question:
+      - {question}
+      
+      event_queue:
+      - {event_queue}
+
+      * Result
+      
+generate_M3_VQA_API:
+    system: |
+      You are an M3 VQA API generation module.
+      Your task is to generate exactly three procedural VQA sub-questions for each event.
+      
+      Assumptions:
+      - All required objects exist in the scene, and the action is feasible.
+      - Do NOT ask existence questions (e.g., "Does the object exist?").
+      - Focus on HOW to execute (procedural details).
+
+      Input:
+      - question: event_queue
+
+      Output:
+      - For each event_queue[i], output:
+        1) One top-level VQA prompt phrased as "How to <event_queue[i]>?"
+        2) Exactly three sub-questions that specify the steps or constraints required to complete the event
+          * Prefer imperative, scene-grounded, and concise wording.
+
+      Output format (strict):
+        vqa("How to <event>?")
+        vqa(["<sub-q1>", "<sub-q2>", "<sub-q3>"])
+
+    user: |
+      You are an M3 VQA API generation module that generate exactly three procedural VQA sub-questions for each event.
+
+      Below is an example.
+
+      * Example Information
+      Event Queue:
+      - place the apple into the hinge_body
+      - place the red cylinder block into the bottom_drawer
+
+      * Example Output
+      vqa("How to place the apple into the hinge_body?")
+      vqa([
+        "Is the hinge_body opened?",
+        "Where is the apple positioned?",
+        "Is the hinge lid closed after positioning?"
+      ])
+
+      Now generate the M3 VQA API.
+
+      * Information
+      Event Queue:
+      - {event_queue}
+
+      * M3 VQA API
+
+vqa_api_executor:
+    system: |
+      You are a VQA API executor that answers questions about the target_scene
+      to evaluate whether the actions demonstrated in the demo can be successfully reproduced.
+
+      The user will provide:
+      - target_scene: the environment where the event queue and event objects are executed
+      - event queue and event objects
+      
+
+      Output: Answer the VQA.
+
+    user: |
+      You are a VQA API executor that evaluates whether the demonstrated actions can be successfully reproduced in the given target_scene.
+
+      Below is an example.
+
+      * Information
+
+      API:
+      vqa("place the apple into the hinge_body") - pick up the apple with the gripper, move it to the hinge_body, then release the gripper.
+
+      vqa([
+        "Is the hinge_body opened?" - yes
+        "Where is the apple positioned?" - behind the hinge_body
+        "Is the hinge lid closed after positioning?" - yes
+      ])
+
+      Now make the answer for the VQA.
+
+      * Information
+      VQA:
+      - {vqa}
+
+      * Result
+
+action_planning:
+    system: |
+      You are a task planner for robotics.
+      The user will provide three synchronized images of the scene (top/front/back views).
+      Your goal is to generate task plans for scene based on provided task information and deployment scene.
+
+      Rules you must follow:
+      
+      Output requirements:
+      - Provide a step-by-step action plan to accomplish the task with each clear and concise single-line actions.
+      - Start the action plan with ordered numbering (1., 2., ...)
+
+      Planning considerations:
+      - The current status of the gripper, whether it is empty or holding an object
+      - The spatial accessibility and approach angle required for the robot to reach the target object without obstruction, including vertical clearance and objects positioned on top of or over the target
+      - Structural or geometric limitations in the environment that would physically prevent the action from being executed
+      - Potential unintended consequences to other objects in the scene that may occur during action execution
+      - Use the VQA answer as additional context about target scene
+
+      Physical constraints:
+      - Gripper approaches via vertical descent; vertical column above target must be unobstructed.
+      - Objects on top or over the target prevent interaction until removed (eg. hinge lids, drawer handles).
+      - Address higher positions before lower (top-to-bottom principle).
+      - Hinge lids rotate up/down; drawer handles slide out/in.
+      - Sweep action requires target object to be on a prepared surface with no obstruction between target and destination point.
+ 
+    user: |
+      Your goal is to generate task plan for scene based on provided task information and deployment scene.
+
+      Below are the definitions of the predicates.
+
+      {predicates}
+
+      Below is an example.
+
+      * Information
+
+      Event Queue:
+      - place green cylinder block into the bottom drawer
+      ...(more events)
+
+      Objects in scene:
+      - green_cylinder, floor, gripper
+
+      Object state in scene:
+      - (GripperClosed)
+
+        * Action Plan
+        1. The gripper opens to prepare for grasping.
+        2. The gripper moves over the green cylinder from above.
+        3. The gripper lowers and encloses the block from above.
+
+        Now provide the action plan for the following information.
+
+      * Information
+
+      Event Queue:
+      - {event_queue}
+
+      Objects in scene:
+      - {target_objects}
+      
+      Object state in scene:
+      - {target_object_state}
+
+      VQA Answer:
+      - {vqa_answer}
+
+      * Action Plan

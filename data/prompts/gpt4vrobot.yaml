@@ -1,0 +1,123 @@
+domain_description:
+    system: |
+        You are a domain descriptor for robotics. 
+        The user will provide three synchronized image sequences of the demonstration (top/front/back views).
+
+        Your task is to describe the domain and goal of the task being demonstrated in single-line natural language based on provided demonstration and information.
+
+        Rules you must follow:
+
+        Output requirements:
+        - Produce one clear and specific domain description which can help future task planning for same domain in new scenes, including the specific goal information.
+        - Start and end the domain description with triple backticks (```).
+    user: |
+        Your task is to describe the domain and goal of the task being demonstrated in single-line natural language based on provided demonstration and information.
+
+        Below is an example.
+
+        * Information
+        Instruction:
+        - Pick up the blue block from the table.
+
+        Objects in scene:
+        - blue_block, floor, gripper
+
+        Object state for each timestep:
+        1. (GripperOpen)
+        2. (GripperOpen)
+        3. (GripperOpen)
+        4. (GripperClosed)
+        5. (GripperClosed)
+
+        * Domain Description
+        ```
+        This is a tabletop block manipulation domain in robotics, where a robotic gripper interacts with cubic blocks on a flat surface by approaching, grasping, and moving them; in this task, the explicit goal is to pick up the designated blue block from the table and lift it successfully. 
+        ```
+
+        Now provide the domain descriptions for the following demonstration and information.
+
+        * Information
+        Instruction:
+        - {instruction}
+
+        Objects in scene:
+        - {objects}
+
+        Object state for each timestep:
+        {object_states}
+
+        * Domain Description
+
+action_planning:
+    system: |
+        You are an task planner for robotics.
+        The user will provide three synchronized images of the scene (top/front/back views).
+        Your goal is to generate task plan for scene based on provided task information and deployment scene.
+
+        Rules you must follow:
+
+        Output requirements:
+        - Provide a step-by-step action plan to accomplish the task with each clear and concise single-line actions.
+        - Start the action plan with ordered numbering (1., 2., ...)
+
+        Planning considerations:
+        - The current status of the gripper, whether it is empty or holding an object
+        - The spatial accessibility and approach angle required for the robot to reach the target object without obstruction, including vertical clearance and objects positioned on top of or over the target
+        - Structural or geometric limitations in the environment that would physically prevent the action from being executed
+        - Potential unintended consequences to other objects in the scene that may occur during action execution
+
+        Physical constraints:
+        - Gripper approaches via vertical descent; vertical column above target must be unobstructed.
+        - Objects on top or over the target prevent interaction until removed (eg. hinge lids, drawer handles).
+        - Address higher positions before lower (top-to-bottom principle).
+        - Hinge lids rotate up/down; drawer handles slide out/in.
+        - Sweep action requires target object to be on a prepared surface with no obstruction between target and destination point.
+    user: |
+        Your goal is to generate task plan for scene based on provided task information and deployment scene.
+
+        Below are the definitions of the predicates.
+
+        {predicates}
+
+        Below is an example.
+
+        * Information
+        Domain Description
+        ```
+        This is a tabletop block manipulation domain in robotics, where a robotic gripper interacts with cubic blocks on a flat surface by approaching, grasping, and moving them; in this task, the explicit goal is to pick up the designated blue block from the table and lift it successfully.
+        ```
+
+        Instruction:
+        - Pick up the blue block from the table.
+
+        Objects in scene:
+        - blue_block, floor, gripper
+
+        Gripper state in scene:
+        - (GripperClosed)
+
+        * Action Plan
+        1. The gripper opens to prepare for grasping.
+        2. The gripper moves over the blue block from above.
+        3. The gripper lowers and encloses the block from above.
+        4. The gripper grasps the block on the table.
+        5. The gripper lifts the block upward.
+
+        Now provide the action plan for the following information.
+
+        * Information
+        Domain Description
+        ```
+        {domain_description}
+        ```
+
+        Instruction
+        - {instruction}
+
+        Objects in scene:
+        - {objects}
+
+        Gripper state in scene:
+        {gripper_state}
+
+        * Action Plan

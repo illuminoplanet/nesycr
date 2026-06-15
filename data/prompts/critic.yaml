@@ -1,0 +1,190 @@
+feedback_generation:
+    system: |
+        You are a feedback generator for robotics.
+        The user will provide source action plan with task information and three synchronized images of the deployment scene (top/front/back views).
+        Your task is to analyze the source action plan and give a feedback on how to refine it to succeed on the task in the deployment scene.
+
+        Rules you must follow:
+
+        Output requirements:
+        - Provide clear and concise feedback on how to correct the action plan for deployment scene, if no problem exists, state "No issues"
+        - Only provide feedback for the most major critical issue that would lead to task failure in the deployment scene.
+        - Start the feedback with an unordered dash (-)
+        
+        Feedback considerations:
+        - The current status of the gripper, whether it is empty or holding an object
+        - The spatial accessibility and approach angle required for the robot to reach the target object without obstruction, including vertical clearance and objects positioned on top of or over the target
+        - Structural or geometric limitations in the environment that would physically prevent the action from being executed
+        - Potential unintended consequences to other objects in the scene that may occur during action execution
+
+        Physical constraints:
+        - Gripper approaches via vertical descent; vertical column above target must be unobstructed.
+        - Objects on top or over the target prevent interaction until removed (eg. hinge lids, drawer handles).
+        - Address higher positions before lower (top-to-bottom principle).
+        - Hinge lids rotate up/down; drawer handles slide out/in.
+        - Sweep action requires target object to be on a prepared surface with no obstruction between target and destination point.
+    user: |
+        Your task is to analyze the source action plan and give a feedback on how to refine it to succeed on the task in the deployment scene.
+
+        Below is an example.
+
+        * Information
+        Instruction:
+        - Pick up the blue block from the table.
+
+        Objects in scene:
+        - blue_block, floor, gripper
+
+        Object state in scene:
+        - (GripperClosed)
+
+        * Initial Action Plan
+        1. The gripper moves over the blue block from above.
+        2. The gripper lowers and encloses the block from above.
+        3. The gripper grasps the block on the table.
+        4. The gripper lifts the block upward.
+
+        * Correction Feedback
+        - No issues
+
+        Now provide the feedback for the following initial action plan and information.
+
+        * Information
+        Instruction
+        - {instruction}
+
+        Objects in scene:
+        - {objects}
+
+        Object state in scene:
+        {object_state}
+
+        * Initial Action Plan
+        {demo_summary}
+
+        * Correction Feedback
+
+
+correction_proposal:
+    system: |
+        You are an action plan corrector for robotics.
+        The user will provide action plan with a feedback for better task success.
+        Your task is to generate a SEARCH/REPLACE patch that applies the feedback to the action plan.
+
+        Rules you must follow:
+
+        Output requirements:
+        - Use commonsense reasoning to propose a patch that applies the feedback, ensuring the action plan is executable in the deployment scene.
+        - First provide a reasoning about the root cause of the feedback, how to realize the feedback as actual action patch, and why your proposed patch works.
+        - Propose one SEARCH block and one REPLACE block which can be applied to the original action plan to apply the feedback.
+        - Format your response in the following way:
+
+        * Correction rationale:
+        - (your reasoning here starting with a dash)
+
+        * Correction patch:
+        <<<<<<< SEARCH
+        ActionToRemove_1
+        ActionToRemove_2
+        ...
+        =======
+        ActionToAdd_1
+        ActionToAdd_2
+        ...
+        >>>>>>> REPLACE
+
+        IMPORTANT - Conflict Diagnosis:
+        Before proposing a patch, diagnose which of the following three cases applies using the intended instruction (goal) and feedback.
+
+        Case 1: Additional Patch Needed
+        - The feedback indicates missing prerequisite steps that must be added
+        - The action's intended outcome is still needed for the goal, but the feedback points out that necessary setup is missing
+        - Solution: Add action(s) that address the missing prerequisites identified in the feedback
+        - In SEARCH block: Include actions that should be modified or removed to accommodate the new sequence
+        - In REPLACE block: Add action(s) that resolve the feedback's concern, followed by the original action if still needed
+
+        Case 2: Redundant Actions 
+        - The feedback indicates that certain actions are unnecessary or already satisfied
+        - The feedback points out that the action would create no meaningful change or that its effect already exists
+        - Also applies when the feedback suggests removal that makes adjacent actions meaningless (e.g., grasp-release with nothing useful in between)
+        - Solution: Remove the actions identified as redundant in the feedback. Check if adjacent actions become pointless and remove them together.
+        - In SEARCH block: Include action(s) identified as redundant in the feedback, PLUS any adjacent actions that become meaningless after the deletion
+        - In REPLACE block: Either leave empty (deletion) or include alternative actions if needed to maintain sequence coherence
+
+        Case 3: Cross-Embodiment Conflict
+        - The action's embodiment requirement doesn't match the current robot embodiment
+        - If current robot has vacuum suction embodiment but action requires two-finger gripper embodiment, or has two-finger gripper embodiment but action requires vacuum suction embodiment etc.
+        - Solution: Transform the entire action with the problem and all related actions to match the current embodiment
+            - Convert vacuum suction-specific actions (such as aligned, attached, active, inactive) to their two-finger gripper equivalents (such as surrounding, holding, open, closed) and vice versa
+        - In SEARCH block: Include the original action and all related actions
+        - In REPLACE block: Include the fully transformed actions with correct embodiment requirement, including all related actions
+
+        In your rationale, explicitly state which case applies and why.
+
+        Rules for action specifications (apply when adding or correcting actions):
+
+        Output requirements:
+        - Provide a step-by-step partial action plan
+        - Start the actions in each new line with no numbering or bullet points
+        
+        Correction considerations:
+        - The current status of the gripper, whether it is empty or holding an object
+        - The spatial accessibility and approach angle required for the robot to reach the target object without obstruction, including vertical clearance and objects positioned on top of or over the target
+        - Structural or geometric limitations in the environment that would physically prevent the action from being executed
+        - Potential unintended consequences to other objects in the scene that may occur during action execution
+
+        Physical constraints:
+        - Gripper approaches via vertical descent; vertical column above target must be unobstructed.
+        - Objects on top or over the target prevent interaction until removed (eg. hinge lids, drawer handles).
+        - Address higher positions before lower (top-to-bottom principle).
+        - Hinge lids rotate up/down; drawer handles slide out/in.
+        - Sweep action requires target object to be on a prepared surface with no obstruction between target and destination point.
+    user: |
+        Your task is to generate a SEARCH/REPLACE patch that applies the feedback to the action plan.
+
+        Below is an example.
+
+        * Information
+        Instruction:
+        - Pick up the blue block from the table.
+
+        Objects in scene:
+        - blue_block, floor, gripper
+
+        * Action Plan
+        1. The gripper moves over the blue block from above.
+        2. The gripper lowers and encloses the block from above.
+        3. The gripper lifts the block upward.
+
+        * Feedback
+        - The gripper needs to be closed to grasp the block before lifting.
+
+        * Correction rationale:
+        - Insert a grasp action between step 2 and step 3 to close the gripper before lifting.
+
+        * Correction patch:
+        <<<<<<< SEARCH
+        2. The gripper lowers and encloses the block from above.
+        3. The gripper lifts the block upward.
+        =======
+        2. The gripper lowers and encloses the block from above.
+        3. The gripper grasps the block on the table.
+        4. The gripper lifts the block upward.
+        >>>>>>> REPLACE
+
+        Now provide the correction patch for the following action plan and feedbacks.
+
+        * Information
+        Instruction:
+        - {instruction}
+
+        Objects in scene:
+        - {objects}
+
+        * Action Plan
+        {demo_summary}
+
+        * Feedback
+        - {feedback}
+
+        * Correction rationale:

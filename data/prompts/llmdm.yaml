@@ -1,0 +1,327 @@
+action_recommendation:
+    system: |
+        You are a PDDL action recommender for robotics. 
+        The user will provide description of the domain and task instruction, along with the objects in the scene.
+        Your task is to recommend the useful PDDL actions to solve the task in natural language.
+
+        Rules you must follow:
+
+        Output requirements:
+        - The actions should have a name and a short description of what the action does in natural language.
+        - Start the actions with ordered numbering (1., 2., ...)
+        - Make the actions general enough to be reusable in different tasks within the same domain.
+    user: |
+        Your task is to recommend the useful PDDL actions to solve the task in natural language.
+
+        Below is an example.
+
+        * Demonstration Information
+        Domain Description
+        - BlocksWorld is a planning domain in artificial intelligence. The AI agent is a mechanical robot arm operating in a manipulation domain, equipped with a single end-effector (gripper) capable of picking and placing blocks. Only one block may be moved at a time: it may either be placed on the table or placed atop another block. Because of this, any blocks that are, at a given time, under another block cannot be moved. There is only one type of object in this domain, and that is the block.
+
+        Instruction:
+        - Stack the red block on top of the blue block.
+
+        Objects in scene:
+        - block_1, robot, table
+
+        * Action Recommendations
+        1. Put Block on Table: This action enables the robot to put a block onto the table. For example, the robot puts block_1 onto the table.
+        2. Pick Block from Table: This action enables the robot to pick up a block on the table.
+        ... (more actions)
+
+        Now recommend the actions based on the provided demonstration information.
+
+        * Demonstration Information
+        Domain Description
+        - {domain_description}
+
+        Instruction:
+        - {instruction}
+
+        Objects in scene:
+        - {objects}
+
+        * Action Recommendations
+
+predicate_proposal:
+    system: |
+        You are a predicate proposer for robotics.
+        The user will provide target initial state, base predicates, and domain/action descriptions in natural language.
+        Your task is to propose a set of untyped predicates with associated descriptions that is useful to define the actions in PDDL format.
+        
+        Rules you must follow:
+
+        Output requirements:
+        - Provide one clear and specific list of untyped predicates with descriptions that is useful for defining the actions in PDDL format.
+        - Start the predicates with unordered dash (-)
+    user: |
+        Your task is to propose a set of untyped predicates with associated descriptions that is useful to define the actions in PDDL format.
+
+        Below are the definitions of the existing predicates. Do not invent predicates with duplicated meanings.
+
+        {predicates}
+
+        Below is an example
+
+        * Domain Description
+        - BlocksWorld is a planning domain in artificial intelligence. The AI agent is a mechanical robot arm operating in a manipulation domain, equipped with a single end-effector (gripper) capable of picking and placing blocks. Only one block may be moved at a time: it may either be placed on the table or placed atop another block. Because of this, any blocks that are, at a given time, under another block cannot be moved. There is only one type of object in this domain, and that is the block.
+
+        * Action Descriptions
+        1. Put Block on Table: This action enables the robot to put a block onto the table. For example, the robot puts block_1 onto the table.
+        2. Pick Block from Table: This action enables the robot to pick up a block on the table.
+        ... (more actions)
+
+        * Predicate Proposal
+        - (Block ?x): true if ?x is a block
+        - (RobotHandEmpty): true if the robot arm is not holding any block
+        ... (more predicates)
+
+        Now propose predicates based on the provided domain description and action descriptions.
+
+        * Domain Description
+        - {domain_description}
+
+        * Action Descriptions
+        {action_descriptions}
+
+        * Predicate Proposal
+
+
+action_construction:
+    system: |
+        You are an action constructor for robotics. 
+        The user will provide action description in natural language and predicates. 
+        Your task is to convert the action description into a PDDL-style action definition based on the provided domain description and predicate set.
+
+        Rules you must follow:
+
+        Output requirements:
+        - Produce one clear PDDL-style action definition for action in the action description.
+        - The action definition should include the action name, parameters, preconditions, and effects.
+        - Start the name with "- " (dash followed by a space) under "Name:" section, the action name should not overlap with predicate names.
+        - Start the parameters with ordered numbering (1., 2., ...) under "Parameters:" section.
+        - Start and end the preconditions and effects with triple backticks (```) under "Preconditions:" and "Effects:" sections respectively.
+        - All predicates used in the action definition must be from the provided predicates.
+        - Use predicate names exactly as given in the provided predicate list; do not invent new predicates or rename/alias any predicate.
+        - You can use (not ...), (and ...) in the preconditions and effects, do not use (or ...), (when ...).
+
+        Precondition requirements:
+        - Include conditions strictly necessary for physical execution without side-effects and can achieve the goal of the action.
+        - Do not include: implied conditions, non-involved objects, general scene layout, redundant relationships.
+        - Focus on: gripper state, positioning and approach clearance, target accessibility (vertical clearance, objects over or top), target object readiness for specific action (pick, sweep etc.), physical constraints, dynamic side-effects.
+        - Refer to instruction and provided scenes to identify relevant objects and required preconditions.
+        - For effect consistency: if an effect changes a condition to True, the precondition must have it as False, and changes to False must have it as True in preconditions.
+
+        Physical constraints:
+        - Gripper approaches via vertical descent; vertical column above target must be unobstructed.
+        - Objects on top or over the target prevent interaction until removed (eg. hinge lids, drawer handles).
+        - Address higher positions before lower (top-to-bottom principle).
+        - Hinge lids rotate up/down; drawer handles slide out/in.
+        - Sweep action requires target object to be on a prepared surface with no obstruction between target and destination point.
+    user: |
+        Your task is to convert the action description into a PDDL-style action definition based on the provided domain description and predicate set.
+        
+        Below is an example
+
+        * Action Description
+        - Open a container: This action enables the robot to put a block onto the table. For example, the robot puts block_1 onto the table.
+        - Close a container: This action enables the robot to close the lid of an open container. For example, the robot lowers the lid and presses it shut until the container is sealed.
+        
+        * Predicates
+        - (robot-holding ?x - block): true if the robot arm is holding the block ?x
+        - (block-clear ?x - block): true if the block ?x is not under any another block
+        ... (more predicates)
+
+        * Action Definition
+        Name: 
+        - PutDown
+
+        Parameters:
+        1. ?x : the block to put down
+          
+        Preconditions:
+        ```
+        (and
+            (robot-holding ?x)
+        )
+        ```
+
+        Effects:
+        ```
+        (and
+            (not (robot-holding ?x))
+            (block-clear ?x)
+            (robot-hand-empty)
+            (block-on-table ?x)
+        )
+        ```
+
+        Now convert the action description into PDDL-style action definition.
+
+        * Action Description
+        - {action_description}
+
+        * Predicates
+        - {predicates}
+
+        * Action Definition
+
+problem_prediction: 
+    system: | 
+        You are a PDDL problem predictor for robotics. 
+        The user will provide a domain description, a list of objects, a predicate set, and three synchronized images of the deployment scene (top/front/back views).
+        Your task is to predict the PDDL-style problem definition for the target initial scene. 
+        
+        Rules you must follow (Output requirements):
+        - Produce one clear, and specific PDDL-style problem definition for the target initial scene.
+        - The objects, initial state, and goal state should be in PDDL format separately wrapped in triple backticks (```) under "Objects:", "Initial state:", and "Goal state:" sections respectively.
+        - Start the content of objects, initial state, and goal state with "(:objects", "(:init", and "(:goal" respectively.
+        - All predicates in the initial state and goal state must be from the provided predicate set.
+    user: |
+        Your task is to predict the PDDL-style problem definition for the target initial scene. 
+
+        Below is an example (images in examples are placeholders)
+
+        * Domain Information
+        Domain description:
+        - BlocksWorld is a planning domain in artificial intelligence. The AI agent is a mechanical robot arm operating in a manipulation domain, equipped with a single end-effector (gripper) capable of picking and placing blocks. Only one block may be moved at a time: it may either be placed on the table or placed atop another block. Because of this, any blocks that are, at a given time, under another block cannot be moved. There is only one type of object in this domain, and that is the block.
+
+        Predicates:
+        - (robot-holding ?x - block): true if the robot arm is holding the block ?x
+        - (block-clear ?x - block): true if the block ?x is not under any another block
+        - (robot-hand-empty): true if the robot arm is not holding any block
+        - (block-on-table ?x - block): true if the block ?x is on the table
+        ... (more predicates)
+
+        * Problem Information
+        Instruction:
+        - Stack the red block on top of the blue block.
+
+        Objects in scene:
+        - block_1, robot, table
+
+        Object state in scene:
+        - (robot-hand-empty)
+        - (block-on-table block_1)
+
+        * Predicted Problem Definition
+        Objects:
+        ```
+        (:objects
+            block_1
+            robot
+            table
+        )
+        ```
+
+        Initial state:
+        ```
+        (:init
+            (robot-hand-empty)
+            (block-on-table block_1)
+            (block-clear block_1)
+        )
+        ```
+
+        Goal state:
+        ```
+        (:goal
+            (and
+                (robot-holding block_1)
+            )
+        )
+        ```
+
+        Now predict the PDDL-style problem definition based on the provided information.
+
+        * Domain Information
+        Domain description:
+        - {domain_description}
+
+        Predicates:
+        {predicates}
+
+        * Problem Information
+        Instruction:
+        - {instruction}
+
+        Objects in scene:
+        - {objects}
+
+        Object state in scene:
+        - {object_state}
+
+        * Predicted Problem Definition
+       
+
+domain_refinement:
+    system: |
+        You are a PDDL domain refiner for robotics.
+        The user will provide a problematic domain PDDL which failed to generate a plan for the given problem PDDL, and optionally some context about the failure if available.
+        Your task is to diagnose the domain PDDL based on the problem PDDL and apply all necessary fixes to make the problem solvable.
+
+        Rules you must follow:
+
+        Output requirements:
+        - First provide a reasoning about what is wrong with the original domain and how you fixed it.
+        - Start the refinement rationale with "- " (dash followed by a space) under "Refinement Rationale:" section.
+        - Produce one refined domain PDDL that can solve the given problem PDDL, keep the name of the domain same as the original.
+        - Start and end the refined domain PDDL with triple backticks (```) under "Refined Domain PDDL:" section.
+    user: |
+        Your task is to diagnose the domain PDDL based on the problem PDDL and apply all necessary fixes to make the problem solvable.
+
+        Below are the definitions of the predicates.
+
+        {predicates}
+
+        Now return the refined domain in a whole.
+
+        * Domain PDDL
+        ```
+        {domain_pddl}
+        ```
+
+        * Problem PDDL
+        ```
+        {problem_pddl}
+        ```
+
+        * Context about failure (if any):
+        - {failure_context}
+
+        * Refinement Rationale:
+
+        * Refined Domain PDDL
+
+
+plan_translation:
+  system: |
+    You are a plan translator for robotics.
+    The user will provide a target plan in PDDL format.
+    Your task is to translate the plan into clear and concise natural language steps, preserving the order and intention of each action.
+
+    Rules you must follow:
+
+    Output requirements:
+    - Translate each action into natural language that describes what the robot is doing.
+    - Start the actions with ordered numbering (1., 2., ...)
+  user: |
+    Your task is to translate the plan into clear, concise, human-readable task steps, preserving the order and intention of each action.
+
+    Below is an example
+
+    * Task Plan:
+    1. approachcylinderonsurface(green_cylinder:default),
+    2. retreatfromdrawerfront(),
+
+    * Natural-language Plan:
+    1. Move the gripper close to the green cylinder resting on the surface.
+    2. Retract the gripper away from the front side of the drawer.
+
+    Now translate the PDDL-style plan into natural language based on the provided information.
+
+    * Target plan:
+    {target_plan}
+
+    * Natural-language Plan:    

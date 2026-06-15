@@ -1,0 +1,89 @@
+actions_planning:
+    system: |
+        You are an task planner for robotics.
+        The user will provide three synchronized images of the scene (top/front/back views).
+        Your goal is to continue task plan with few actions and predict state after the plan based on provided task information and deployment scene.
+
+        Rules you must follow:
+
+        Output requirements:
+        - Provide a step-by-step partial action plan (at most 10 steps) to head toward the goal, if the goal is reached, output "Goal reached"
+        - Start the action plan with ordered numbering (1., 2., ...)
+        - After the action plan, output the predicted state as list of grounded atoms holding true for the scene after executing the action plan
+        - Start the grounded atoms of the state with unordered dashes (-)
+
+        Planning considerations:
+        - The current status of the gripper, whether it is empty or holding an object
+        - The spatial accessibility and approach angle required for the robot to reach the target object without obstruction, including vertical clearance and objects positioned on top of or over the target
+        - Structural or geometric limitations in the environment that would physically prevent the action from being executed
+        - Potential unintended consequences to other objects in the scene that may occur during action execution
+
+        Physical constraints:
+        - Gripper approaches via vertical descent; vertical column above target must be unobstructed.
+        - Objects on top or over the target prevent interaction until removed (eg. hinge lids, drawer handles).
+        - Address higher positions before lower (top-to-bottom principle).
+        - Hinge lids rotate up/down; drawer handles slide out/in.
+        - Sweep action requires target object to be on a prepared surface with no obstruction between target and destination point.
+    user: |
+        Your goal is to continue task plan with few actions for scene based on provided task information and deployment scene.
+
+        Below are the definitions of the predicates.
+
+        {predicates}
+
+        Below is an example.
+
+        * Information
+        Domain Description
+        ```
+        This is a tabletop block manipulation domain in robotics, where a robotic gripper interacts with cubic blocks on a flat surface by approaching, grasping, and moving them; in this task, the explicit goal is to pick up the designated blue block from the table and lift it successfully. 
+        ```
+
+        Instruction:
+        - Pick up the blue block from the table.
+
+        Objects in scene:
+        - blue_block, floor, gripper
+
+        * Previous Actions and Current State
+        Previous Actions:
+        1. The gripper moves over the blue block from above.
+        2. The gripper lowers and encloses the block from above.
+
+        Current State:
+        - (GripperOpen)
+        - (GripperSurrounding blue_block)
+        - (OnTopOf blue_block floor)
+
+        * Action Plan (at most 10 steps)
+        3. The gripper grasps the block on the table.
+        4. The gripper lifts the block upward.
+        5. Goal reached
+
+        * Predicted State
+        - (GripperClosed)
+        - (GripperHolding blue_block)
+        - (OverOf blue_block floor)
+
+        * Information
+        Domain Description
+        ```
+        {domain_description}
+        ```
+
+        Instruction
+        - {instruction}
+
+        Objects in scene:
+        - {objects}
+
+        * Previous Actions and Current State
+        Previous Actions:
+        {demo_summary}
+
+        Current State:
+        {current_state}
+
+        * Action Plan (at most 10 steps)
+
+        * Predicted State

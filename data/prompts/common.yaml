@@ -1,0 +1,1346 @@
+predicates:
+    partial: |
+        (OverOf ?a ?b): ?a is horizontally aligned and vertically above ?b but not in contact.
+        (OnTopOf ?a ?b): ?a is resting on and vertically supported by ?b.
+        (InsideOf ?a ?b): ?a is contained in ?b.
+
+        (GripperSurrounding ?x): ?x is enclosed between tip of two gripper fingers, but the gripper is not closed
+        (GripperHolding ?x): the gripper is closed and holding ?x
+
+    full: |
+        (OverOf ?a ?b): ?a is horizontally aligned and vertically above ?b but not in contact.
+        (OnTopOf ?a ?b): ?a is resting on and vertically supported by ?b.
+        (InsideOf ?a ?b): ?a is contained in ?b (eg. an object inside a box/drawer).
+
+        (Open ?x): ?x is in a fully-opened state (e.g., a drawer is fully pulled out, a hinge lid is fully open).
+        (Closed ?x): ?x is in a fully-closed state (e.g., a drawer is fully pushed in, a hinge lid is fully shut).
+
+        (GripperSurrounding ?x): ?x is enclosed between tip of two gripper fingers, but the gripper is not closed
+        (GripperHolding ?x): the gripper is closed and holding ?x
+        (GripperOpen): the gripper is open
+        (GripperClosed): the gripper is closed
+
+    extended: |
+        (OverOf ?a ?b): ?a is horizontally aligned and vertically above ?b but not in contact.
+        (OnTopOf ?a ?b): ?a is resting on and vertically supported by ?b.
+        (InsideOf ?a ?b): ?a is contained in ?b (eg. an object inside a box/drawer).
+
+        (Open ?x): ?x is in a fully-opened state (e.g., a drawer is fully pulled out, a hinge lid is fully open).
+        (Closed ?x): ?x is in a fully-closed state (e.g., a drawer is fully pushed in, a hinge lid is fully shut).
+
+        # Robot embodiement predicates
+        (FingerGripper): The robot is a two-finger gripper robot for grasping objects, necessary precondition for finger gripper-specific predicates and actions.
+        (VacuumSuction): The robot is a vacuum suction robot, necessary precondition for vacuum suction-specific predicates and actions.
+
+        # Finger embodiement-specific predicates ((FingerGripper) must hold, can not be used with vacuum suction-specific predicates)
+        (GripperSurrounding ?x): ?x is enclosed between tip of two gripper fingers, but the gripper is not closed
+        (GripperHolding ?x): the gripper is closed and holding ?x
+        (GripperOpen): the gripper is open
+        (GripperClosed): the gripper is closed
+    
+        # Vacuum embodiement-specific predicates ((VacuumSuction) must hold, can not be used with finger gripper-specific predicates)
+        (VacuumAligned ?x): ?x is positioned within reachable proximity, but vacuum is not yet active (similar function to GripperSurrounding)
+        (VacuumAttached ?x): the vacuum suction is active and ?x is currently attached to it (similar function to GripperHolding)
+        (VacuumActive): the vacuum suction is turned on, generating negative pressure for attachment (similar function to GripperClosed)
+        (VacuumInactive): the vacuum suction is turned off, not generating suction (similar function to GripperOpen)
+
+    end_effector: |
+        (FingerGripper): The robot is a two-finger gripper robot for grasping objects, necessary precondition for finger gripper-specific predicates and actions.
+        (VacuumSuction): The robot is a vacuum suction robot, necessary precondition for vacuum suction-specific predicates and actions.
+        (GripperOpen): the gripper is open
+        (GripperClosed): the gripper is closed
+        (VacuumActive): the vacuum suction is turned on, generating negative pressure for attachment (similar function to GripperClosed)
+        (VacuumInactive): the vacuum suction is turned off, not generating suction (similar function to GripperOpen)
+
+
+state_prediction:
+    system: |
+        You are a state predictor for robotics.
+        The user will provide you with two synchronized images of the scene (top/front views) and partial ground truth states.
+        Your task is to identify and predict the missing spatial relationships.
+
+        Rules you must follow:
+        - Start the grounded atoms with unordered dashes (-)
+        - Only include atoms that are strongly supported by the images, output "None" if no additional atoms can be inferred
+        - Do not repeat information already provided in object state
+    user: |
+        Your task is to output state as list of grounded atoms which additionally holds true for the provided scene and information.
+
+        Below are the definitions of the predicates.
+
+        {predicates}
+
+        Below is an example.
+
+        * Information
+        Instruction:
+        - Pick up the blue block from the table.
+
+        Objects in scene:
+        - blue_block, floor, gripper
+
+        Object state in scene:
+        - (GripperClosed)  
+        - (GripperHolding blue_block) 
+
+        * State Predictions   
+        - None
+
+        Now provide the scene descriptions for the following sequences.
+
+        * Information
+        Instruction:
+        - {instruction}
+
+        Objects in scene:
+        - {objects}
+
+        Object state in scene:
+        - {object_state}
+
+        * State Predictions
+
+code_generation:
+    system: |
+        You are a python code generator for robotics. 
+        The user will provide two things:
+        1) A set of imported Python modules and docstrings describing the available functions.
+        2) A specification containing:
+        - Instruction: A natural language command for the robot
+        - Objects in scene: List of available objects
+        - Demonstration summary (optional): A sequence of high-level action steps that serve as a high-level plan.
+
+        Rules you must follow:
+
+        Output requirements:
+        - Use only the provided Python libraries and functions. Do not import new libraries, create new APIs, or change function signatures.
+        - Adhere strictly to the given docstrings. Call functions exactly as defined, with the allowed parameters.
+        - Return only the Python code, enclosed in triple backticks (```python ... ```).
+        - Treat the Demonstration Summary as a high-level plans; follow its sequence based on the Instruction and available objects.
+        - Do not add extra steps unless they are implied by the demonstration summary or the instruction.
+    user: |
+        You need to write robot control scripts in Python code. 
+        The Python code should be general and applicable to different robotics environments.
+        Below are the imported Python libraries and functions that you can use, you CANNOT import new libraries.
+
+        python```
+        import numpy as np
+        from robot_controller.perception import is_obj_visible, get_obj_names, get_obj_pos, get_obj_bbox, get_obj_size, obj_in_gripper, gripper_is_open, get_empty_floor_xy
+        from robot_controller.action import move_to_position, move_gripper_to, move_parallel, grasp_handle, release_handle, close_gripper, open_gripper
+        ```
+
+        Below shows the docstrings for these imported library functions that you must follow. You CANNOT add additional parameters to these functions.
+
+        * Perception API
+        python```
+        is_obj_visible(obj_name)
+        """
+        Check if an object with the given name exists in the current scene.
+
+        Parameters:
+            obj_name (str)
+        Returns:
+            bool
+        """
+
+        get_obj_names()
+        """
+        Get a list of all object names in the scene.
+
+        Returns:
+            List[str]
+        """
+
+        get_obj_pos(obj_name)
+        """
+        Get the current xyz position of an object (AABB center). For "floor", z is fixed to 0.50.
+        Make sure to call this function each time right before you need the position, as the object may have moved.
+
+        Parameters:
+            obj_name (str)
+        Returns:
+            np.ndarray: [x, y, z]
+        """
+
+        get_obj_bbox(obj_name)
+        """
+        Get the axis-aligned bounding box (AABB) of an object.
+
+        Parameters:
+            obj_name (str)
+        Returns:
+            np.ndarray: shape (2, 3) -> [min_xyz, max_xyz]
+        """
+
+        get_obj_size(obj_name)
+        """
+        Get the size of an object (AABB dimensions).
+        Parameters:
+            obj_name (str)
+        Returns:
+            np.ndarray: shape (3,) -> [size_x, size_y, size_z]
+        """
+
+        obj_in_gripper(obj_name)
+        """
+        Check if the line segment between gripper fingers intersects the object's AABB.
+
+        Parameters:
+            obj_name (str)
+        Returns:
+            bool
+        """
+
+        gripper_is_open()
+        """
+        Check whether the gripper is currently open.
+
+        Returns:
+            bool
+        """
+
+        get_empty_floor_xy(obj_name)
+        """
+        Find a collision-free (x, y) position on the floor for placing the given object.
+        Only (x, y) is returned.
+
+        Parameters:
+            obj_name (str)
+        Returns:
+            np.ndarray: shape (2,) -> [x, y]
+        """
+        ```
+
+        * Action API
+        python```
+        move_to_position(pos, lift_clearance=0.12)
+        """
+        Move the end-effector to a target position with a given approach direction.
+
+        Parameters:
+            pos (np.ndarray): Target [x, y, z]
+            lift_clearance (float): Vertical clearance above source and target position before ascending and descending (default 0.12m). You MUST set to 0.0 if you do not want ascending/descending motion.
+
+        """
+
+        move_gripper_to(obj_name, depth=0.01)
+        """
+        Approach and align the gripper to the target object and move in by a small depth. Approach with lift clearance of 0.12m.
+
+        Parameters:
+            obj_name (str): Target object name
+            depth (float): Penetration distance toward object along approach direction, set wisely from object size
+        """
+
+        move_parallel(move_dir, offset)
+        """
+        Translate the end-effector parallel to its current approach direction frame.
+
+        Parameters:
+            move_dir (str): One of ["left", "right", "up"]
+            offset (float): Positive translation magnitude in meters
+        """
+
+        grasp_handle(handle_name)
+        """
+        Attempt to grasp a handle object; succeeds if the gripper is positioned within the handle's vicinity.
+
+        Parameters:
+            handle_name (str)
+        Returns:
+            bool: True if grasp activated, else False
+        """
+
+        release_handle()
+        """
+        Release the currently grasped handle and open the gripper.
+
+        Returns:
+            None
+        """
+
+        close_gripper()
+        """
+        Close the gripper with force control.
+        """
+
+        open_gripper()
+        """
+        Open the gripper fully.
+        """
+        ```
+
+        Below are some examples.
+        
+        # Example 1
+
+        * Specification
+        Instruction:
+        - Pick the block
+
+        Objects in scene:
+        - blue_block, floor, gripper
+
+        Demonstration summary:
+        - None
+
+        * Generated Code
+        ```python
+
+        # Move the gripper over the blue block from above
+        blue_block_size = get_obj_size("blue_block")
+
+        # move_to_position(pos=get_obj_pos("blue_block") + np.array([0, 0, 0.15]), lift_clearance=0.15)
+        # Do not have to set lift clearance as it is handled by move_gripper_to
+
+        move_gripper_to("blue_block", depth=blue_block_size[2] / 2)
+
+        # Grab the blue block by closing the gripper
+        close_gripper()
+
+        # Lift the blue block above from current position after grasping it 
+        blue_block_pos = get_obj_pos("blue_block")
+        move_to_position(pos=blue_block_pos + np.array([0, 0, 0.15]), lift_clearance=0.0)
+        ```
+
+        # Example 2
+
+        * Specification
+        Instruction:
+        - Drop the holding red block in the box which the blue block is in
+
+        Objects in scene:
+        - blue_block, red_block, target_box, floor, gripper
+
+        Demonstration summary:
+        - None
+
+        * Generated Code
+        ```python
+        # Assume the gripper is already holding the red block
+
+        # Get the target box position and size
+        box_pos = get_obj_pos("target_box")
+        box_aabb = get_obj_bbox("target_box")
+
+        # Compute a drop position slightly above the top of the box
+        drop_height = box_aabb[1][2] + 0.02
+
+        # Get red block size for grid calculation
+        red_aabb = get_obj_bbox("red_block")
+        red_size = red_aabb[1] - red_aabb[0]
+        obj_w = float(red_size[0])
+        half_w = obj_w / 2.0
+
+        # Define grid positions to avoid stacking directly on blue block
+        grid_positions = [
+            (-half_w, -half_w),
+            (half_w, -half_w),
+            (-half_w, half_w),
+            (half_w, half_w),
+        ]
+
+        # Select grid position based on object index
+        cube_idx = 0  # Index for red_block
+        grid_offset = grid_positions[cube_idx % 4]
+
+        drop_pos = np.array([box_pos[0] + grid_offset[0], box_pos[1] + grid_offset[1], drop_height])
+
+        # Move the gripper holding the block above the box
+        move_to_position(pos=drop_pos, lift_clearance=0.15)
+
+        # Release the block into the box
+        open_gripper()
+        ```
+
+        # Example 3 (Gripper Robot)
+
+        * Specification
+        Instruction:
+        - Open then close the hinge lid
+
+        Objects in scene:
+        - hinge_lid, hinge_body, hinge_handle, floor, gripper
+
+        Demonstration summary:
+        - None
+
+        * Generated Code
+        ```python
+
+        """Open the hinge lid"""
+        # Move the gripper close to the hinge handle
+        move_gripper_to("hinge_handle", depth=0.0)
+
+        # Grasp to the handle for manipulation
+        grasp_handle("hinge_handle")
+
+        # Pull along an opening arc using the lid's approximate radius (hinge body faces to the robot)
+        hinge_lid_pos = get_obj_pos("hinge_lid")
+        hinge_body_size = get_obj_size("hinge_body")
+        radius = hinge_body_size[0] # approximate radius of the hinge lid
+        move_to_position(hinge_lid_pos + np.array([radius * 0.5, 0, radius]), lift_clearance=0.0)
+
+        # Release the holding handle
+        release_handle()
+
+        """Close the hinge lid"""
+        # Move the gripper close to the hinge handle
+        move_gripper_to("hinge_handle", depth=0.0)
+
+        # Grasp the handle for manipulation
+        grasp_handle("hinge_handle")
+
+        # Push the handle toward a closing pose near the hinge body edge
+        hinge_body_pos = get_obj_pos("hinge_body")
+        hinge_body_size = get_obj_size("hinge_body")
+        target_close_pos = hinge_body_pos + hinge_body_size * np.array([-0.5, 0.0, 0.5])
+        move_to_position(target_close_pos, lift_clearance=0.0)
+
+        # Release the handle
+        release_handle()
+        ```
+
+        # Example 4 (Gripper Robot)
+
+        * Specification
+        Instruction:
+        - Open then close the prismatic drawer
+
+        Objects in scene:
+        - top_drawer, top_handle, floor, gripper
+
+        Demonstration summary:
+        - None
+
+        * Generated Code
+        ```python
+
+        """Open the prismatic drawer"""
+        # Move the gripper close to the drawer handle
+        move_gripper_to("top_handle", depth=0)
+
+        # Grasp to the handle for manipulation
+        grasp_handle("top_handle")
+
+        # Slide the drawer along its prismatic axis toward the open direction
+        drawer_size = get_obj_size("top_drawer")
+        move_amount = drawer_size[1] * 0.85  # reasonable travel to fully open
+
+        # Determine the drawer open and close direction from relative position between drawer body and handle
+        top_handle_pos = get_obj_pos("top_handle")
+        drawer_body_pos = get_obj_pos("drawer_body")
+
+        if top_handle_pos[1] > drawer_body_pos[1]:
+            open_dir, close_dir = "right", "left" # drawer is facing right
+        else:
+            open_dir, close_dir = "left", "right" # drawer is facing left
+
+        move_parallel(move_dir=open_dir, offset=move_amount)
+
+        # Release the holding handle
+        release_handle()
+
+        """Close the prismatic drawer"""
+        # Move the gripper close to the drawer handle
+        move_gripper_to("top_handle", depth=0)
+
+        # Grasp to the handle for manipulation
+        grasp_handle("top_handle")
+
+        # Slide the drawer along its prismatic axis toward the closed direction
+        drawer_size = get_obj_size("top_drawer")
+        move_amount = drawer_size[1] * 0.8  # reasonable travel to fully close
+        move_parallel(move_dir=close_dir, offset=move_amount) 
+
+        # Release the holding handle
+        release_handle()
+        ```
+
+        # Example 5 (Both Robot Types - Sweep)
+
+        * Specification
+        Instruction:
+        - Sweep the white rook into the left box.
+
+        Objects in scene:
+        - white_rook, left_chess_box, floor, gripper
+
+        Demonstration summary:
+        - None
+
+        * Generated Code
+        ```python
+
+        # Get positions and size
+        box_pos = get_obj_pos("left_chess_box")
+        target_pos = get_obj_pos("white_rook")
+        obj_h = get_obj_size("white_rook")[2]
+
+        # Move gripper to white_rook from above
+        move_gripper_to("white_rook", depth=obj_h / 1.3)
+
+        # Calculate sweep distance and direction
+        goal_dist = abs(target_pos[1] - box_pos[1]) + 0.02 # add bit margin to ensure inside box
+        move_dir = "left" if target_pos[1] > box_pos[1] else "right"
+
+        # Sweep toward the box without gripping or lifting
+        move_parallel(move_dir=move_dir, offset=goal_dist)
+        ```
+
+        # Example 6 (Vacuum Suction Robot)
+
+        * Specification
+        Instruction:
+        - Pick the block
+
+        Objects in scene:
+        - blue_block, floor, gripper
+
+        Demonstration summary:
+        - None
+
+        * Generated Code
+        ```python
+
+        # Move the vacuum gripper over the blue block from above
+        blue_block_size = get_obj_size("blue_block")
+
+        move_gripper_to("blue_block", depth=blue_block_size[2] / 2)
+
+        # Attach the blue block by activating the vacuum
+        activate_vacuum()
+
+        # Lift the blue block above from current position after attaching it
+        blue_block_pos = get_obj_pos("blue_block")
+        move_to_position(pos=blue_block_pos + np.array([0, 0, 0.15]), lift_clearance=0.0)
+        ```
+
+        # Example 7 (Vacuum Suction Robot)
+
+        * Specification
+        Instruction:
+        - Drop the holding red block in the box which the blue block is in
+
+        Objects in scene:
+        - blue_block, red_block, target_box, floor, gripper
+
+        Demonstration summary:
+        - None
+
+        * Generated Code
+        ```python
+        # Assume the vacuum is already holding the red block
+
+        # Get the target box position and size
+        box_pos = get_obj_pos("target_box")
+        box_aabb = get_obj_bbox("target_box")
+
+        # Compute a drop position slightly above the top of the box
+        drop_height = box_aabb[1][2] + 0.02
+
+        # Get red block size for grid calculation
+        red_aabb = get_obj_bbox("red_block")
+        red_size = red_aabb[1] - red_aabb[0]
+        obj_w = float(red_size[0])
+        half_w = obj_w / 2.0
+
+        # Define grid positions to avoid stacking directly on blue block
+        grid_positions = [
+            (-half_w, -half_w),
+            (half_w, -half_w),
+            (-half_w, half_w),
+            (half_w, half_w),
+        ]
+
+        # Select grid position based on object index
+        cube_idx = 0  # Index for red_block
+        grid_offset = grid_positions[cube_idx % 4]
+
+        drop_pos = np.array([box_pos[0] + grid_offset[0], box_pos[1] + grid_offset[1], drop_height])
+
+        # Move the vacuum holding the block above the box
+        move_to_position(pos=drop_pos, lift_clearance=0.15)
+
+        # Release the block into the box by deactivating vacuum
+        deactivate_vacuum()
+        ```
+
+        # Example 8 (Vacuum Suction Robot)
+
+        * Specification
+        Instruction:
+        - Open then close the hinge lid
+
+        Objects in scene:
+        - hinge_lid, hinge_body, hinge_handle, floor, gripper
+
+        Demonstration summary:
+        - None
+
+        * Generated Code
+        ```python
+
+        """Open the hinge lid"""
+        # Move the vacuum gripper close to the hinge handle
+        move_gripper_to("hinge_handle", depth=0.0)
+
+        # Attach to the handle for manipulation
+        attach_vacuum_handle("hinge_handle")
+
+        # Pull along an opening arc using the lid's approximate radius (hinge body faces to the robot)
+        hinge_lid_pos = get_obj_pos("hinge_lid")
+        hinge_body_size = get_obj_size("hinge_body")
+        radius = hinge_body_size[0] # approximate radius of the hinge lid
+        move_to_position(hinge_lid_pos + np.array([radius * 0.5, 0, radius]), lift_clearance=0.0)
+
+        # Detach from the holding handle
+        detach_vacuum_handle()
+
+        """Close the hinge lid"""
+        # Move the vacuum gripper close to the hinge handle
+        move_gripper_to("hinge_handle", depth=0.0)
+
+        # Attach to the handle for manipulation
+        attach_vacuum_handle("hinge_handle")
+
+        # Push the handle toward a closing pose near the hinge body edge
+        hinge_body_pos = get_obj_pos("hinge_body")
+        hinge_body_size = get_obj_size("hinge_body")
+        target_close_pos = hinge_body_pos + hinge_body_size * np.array([-0.5, 0.0, 0.5])
+        move_to_position(target_close_pos, lift_clearance=0.0)
+
+        # Detach from the handle
+        detach_vacuum_handle()
+        ```
+
+        # Example 9 (Vacuum Suction Robot)
+
+        * Specification
+        Instruction:
+        - Open then close the prismatic drawer
+
+        Objects in scene:
+        - top_drawer, top_handle, floor, gripper
+
+        Demonstration summary:
+        - None
+
+        * Generated Code
+        ```python
+
+        """Open the prismatic drawer"""
+        # Move the vacuum gripper close to the drawer handle
+        move_gripper_to("top_handle", depth=0)
+
+        # Attach to the handle for manipulation
+        attach_vacuum_handle("top_handle")
+
+        # Slide the drawer along its prismatic axis toward the open direction
+        drawer_size = get_obj_size("top_drawer")
+        move_amount = drawer_size[1] * 0.85  # reasonable travel to fully open
+
+        # Determine the drawer open and close direction from relative position between drawer body and handle
+        top_handle_pos = get_obj_pos("top_handle")
+        drawer_body_pos = get_obj_pos("drawer_body")
+
+        if top_handle_pos[1] > drawer_body_pos[1]:
+            open_dir, close_dir = "right", "left" # drawer is facing right
+        else:
+            open_dir, close_dir = "left", "right" # drawer is facing left
+
+        move_parallel(move_dir=open_dir, offset=move_amount)
+
+        # Detach from the holding handle
+        detach_vacuum_handle()
+
+        """Close the prismatic drawer"""
+        # Move the vacuum gripper close to the drawer handle
+        move_gripper_to("top_handle", depth=0)
+
+        # Attach to the handle for manipulation
+        attach_vacuum_handle("top_handle")
+
+        # Slide the drawer along its prismatic axis toward the closed direction
+        drawer_size = get_obj_size("top_drawer")
+        move_amount = drawer_size[1] * 0.8  # reasonable travel to fully close
+        move_parallel(move_dir=close_dir, offset=move_amount)
+
+        # Detach from the holding handle
+        detach_vacuum_handle()
+        ```
+
+        Now generate Python code that follows the given specification.
+
+        * Specification
+        Instruction:
+        - {instruction}
+
+        Objects in scene:
+        - {objects}
+
+        Demonstration summary:
+        {demo_summary}
+
+        * Generated Code
+
+
+code_generation_extended:
+    system: |
+        You are a python code generator for robotics.
+        The user will provide two things:
+        1) A set of imported Python modules and docstrings describing the available functions.
+        2) A specification containing:
+        - Instruction: A natural language command for the robot
+        - Objects in scene: List of available objects
+        - Demonstration summary (optional): A sequence of high-level action steps that serve as a high-level plan.
+
+        Rules you must follow:
+
+        Output requirements:
+        - Use only the provided Python libraries and functions. Do not import new libraries, create new APIs, or change function signatures.
+        - Adhere strictly to the given docstrings. Call functions exactly as defined, with the allowed parameters.
+        - Return only the Python code, enclosed in triple backticks (```python ... ```).
+        - Treat the Demonstration Summary as a high-level plans; follow its sequence based on the Instruction and available objects.
+        - Do not add extra steps unless they are implied by the demonstration summary or the instruction.
+    user: |
+        You need to write robot control scripts in Python code.
+        The Python code should be general and applicable to different robotics environments.
+        Below are the imported Python libraries and functions that you can use, you can not import new libraries.
+
+        python```
+        import numpy as np
+        from robot_controller.perception import is_obj_visible, get_obj_names, get_obj_pos, get_obj_bbox, get_obj_size, obj_in_gripper, gripper_is_open, get_empty_floor_xy
+        from robot_controller.action import move_to_position, move_gripper_to, move_parallel, grasp_handle, release_handle, close_gripper, open_gripper, attach_vacuum_handle, detach_vacuum_handle, activate_vacuum, deactivate_vacuum
+        ```
+
+        Below shows the docstrings for these imported library functions that you must follow. You CANNOT add additional parameters to these functions.
+
+        * Perception API
+        python```
+        is_obj_visible(obj_name)
+        """
+        Check if an object with the given name exists in the current scene.
+
+        Parameters:
+            obj_name (str)
+        Returns:
+            bool
+        """
+
+        get_obj_names()
+        """
+        Get a list of all object names in the scene.
+
+        Returns:
+            List[str]
+        """
+
+        get_obj_pos(obj_name)
+        """
+        Get the current xyz position of an object (AABB center). For "floor", z is fixed to 0.50.
+        Make sure to call this function each time right before you need the position, as the object may have moved.
+
+        Parameters:
+            obj_name (str)
+        Returns:
+            np.ndarray: [x, y, z]
+        """
+
+        get_obj_bbox(obj_name)
+        """
+        Get the axis-aligned bounding box (AABB) of an object.
+
+        Parameters:
+            obj_name (str)
+        Returns:
+            np.ndarray: shape (2, 3) -> [min_xyz, max_xyz]
+        """
+
+        get_obj_size(obj_name)
+        """
+        Get the size of an object (AABB dimensions).
+        Parameters:
+            obj_name (str)
+        Returns:
+            np.ndarray: shape (3,) -> [size_x, size_y, size_z]
+        """
+
+        obj_in_gripper(obj_name)
+        """
+        Check if the line segment between gripper fingers intersects the object's AABB.
+
+        Parameters:
+            obj_name (str)
+        Returns:
+            bool
+        """
+
+        gripper_is_open()
+        """
+        Check whether the gripper is currently open.
+
+        Returns:
+            bool
+        """
+
+        get_empty_floor_xy(obj_name)
+        """
+        Find a collision-free (x, y) position on the floor for placing the given object.
+        Only (x, y) is returned.
+
+        Parameters:
+            obj_name (str)
+        Returns:
+            np.ndarray: shape (2,) -> [x, y]
+        """
+        ```
+
+        * Action API
+        python```
+        move_to_position(pos, lift_clearance=0.12)
+        """
+        Move the end-effector to a target position with a given approach direction.
+
+        Parameters:
+            pos (np.ndarray): Target [x, y, z]
+            lift_clearance (float): Vertical clearance above source and target position before ascending and descending (default 0.12m). You MUST set to 0.0 if you do not want ascending/descending motion.
+
+        """
+
+        move_gripper_to(obj_name, depth=0.01)
+        """
+        Approach and align the gripper to the target object and move in by a small depth. Approach with lift clearance of 0.12m.
+
+        Parameters:
+            obj_name (str): Target object name
+            depth (float): Penetration distance toward object along approach direction, set wisely from object size
+        """
+
+        move_parallel(move_dir, offset)
+        """
+        Translate the end-effector parallel to its current approach direction frame.
+
+        Parameters:
+            move_dir (str): One of ["left", "right", "up"]
+            offset (float): Positive translation magnitude in meters
+        """
+
+        grasp_handle(handle_name)
+        """
+        Attempt to grasp a handle object; succeeds if the gripper is positioned within the handle's vicinity.
+
+        Parameters:
+            handle_name (str)
+        Returns:
+            bool: True if grasp activated, else False
+        """
+
+        release_handle()
+        """
+        Release the currently grasped handle and open the gripper.
+
+        Returns:
+            None
+        """
+
+        close_gripper()
+        """
+        Close the gripper with force control.
+        """
+
+        open_gripper()
+        """
+        Open the gripper fully.
+        """
+
+        attach_vacuum_handle(handle_name)
+        """
+        Attempt to attach vacuum to a handle object for vacuum suction robots; succeeds if the vacuum gripper is positioned within the handle's vicinity.
+        This is the vacuum suction equivalent of grasp_handle().
+
+        Parameters:
+            handle_name (str)
+        Returns:
+            bool: True if attachment activated, else False
+        """
+
+        detach_vacuum_handle()
+        """
+        Detach the currently attached handle from vacuum suction and deactivate vacuum.
+        This is the vacuum suction equivalent of release_handle().
+
+        Returns:
+            None
+        """
+
+        activate_vacuum()
+        """
+        Activate the vacuum suction to generate negative pressure for attachment.
+        This is the vacuum suction equivalent of close_gripper().
+        """
+
+        deactivate_vacuum()
+        """
+        Deactivate the vacuum suction to stop generating negative pressure.
+        This is the vacuum suction equivalent of open_gripper().
+        """
+        ```
+
+        IMPORTANT: The robot's end-effector type (gripper or vacuum suction) must match the demonstrated examples.
+        - Examples 1-5 (Gripper Robot) use gripper-specific functions (close_gripper, open_gripper, grasp_handle, release_handle) and are compatible ONLY with two-finger gripper robots.
+        - Examples 6-10 (Vacuum Suction Robot) use vacuum-specific functions (activate_vacuum, deactivate_vacuum, attach_vacuum_handle, detach_vacuum_handle) and are compatible ONLY with vacuum suction robots.
+
+        You must use the appropriate functions based on the robot's end-effector type. Do not mix gripper and vacuum functions.
+
+        Below are some examples.
+
+        # Example 1 (Gripper Robot)
+
+        * Specification
+        Instruction:
+        - Pick the block
+
+        Objects in scene:
+        - blue_block, floor, gripper
+
+        Demonstration summary:
+        - None
+
+        * Generated Code
+        ```python
+
+        # Move the gripper over the blue block from above
+        blue_block_size = get_obj_size("blue_block")
+
+        # move_to_position(pos=get_obj_pos("blue_block") + np.array([0, 0, 0.15]), lift_clearance=0.15)
+        # Do not have to set lift clearance as it is handled by move_gripper_to
+
+        move_gripper_to("blue_block", depth=blue_block_size[2] / 2)
+
+        # Grab the blue block by closing the gripper
+        close_gripper()
+
+        # Lift the blue block above from current position after grasping it
+        blue_block_pos = get_obj_pos("blue_block")
+        move_to_position(pos=blue_block_pos + np.array([0, 0, 0.15]), lift_clearance=0.0)
+        ```
+
+        # Example 2 (Gripper Robot)
+
+        * Specification
+        Instruction:
+        - Drop the holding red block in the box which the blue block is in
+
+        Objects in scene:
+        - blue_block, red_block, target_box, floor, gripper
+
+        Demonstration summary:
+        - None
+
+        * Generated Code
+        ```python
+        # Assume the gripper is already holding the red block
+
+        # Get the target box position and size
+        box_pos = get_obj_pos("target_box")
+        box_aabb = get_obj_bbox("target_box")
+
+        # Compute a drop position slightly above the top of the box
+        drop_height = box_aabb[1][2] + 0.02
+
+        # Get red block size for grid calculation
+        red_aabb = get_obj_bbox("red_block")
+        red_size = red_aabb[1] - red_aabb[0]
+        obj_w = float(red_size[0])
+        half_w = obj_w / 2.0
+
+        # Define grid positions to avoid stacking directly on blue block
+        grid_positions = [
+            (-half_w, -half_w),
+            (half_w, -half_w),
+            (-half_w, half_w),
+            (half_w, half_w),
+        ]
+
+        # Select grid position based on object index
+        cube_idx = 0  # Index for red_block
+        grid_offset = grid_positions[cube_idx % 4]
+
+        drop_pos = np.array([box_pos[0] + grid_offset[0], box_pos[1] + grid_offset[1], drop_height])
+
+        # Move the gripper holding the block above the box
+        move_to_position(pos=drop_pos, lift_clearance=0.15)
+
+        # Release the block into the box
+        open_gripper()
+        ```
+
+        # Example 3 (Gripper Robot)
+
+        * Specification
+        Instruction:
+        - Open then close the hinge lid
+
+        Objects in scene:
+        - hinge_lid, hinge_body, hinge_handle, floor, gripper
+
+        Demonstration summary:
+        - None
+
+        * Generated Code
+        ```python
+
+        """Open the hinge lid"""
+        # Move the gripper close to the hinge handle
+        move_gripper_to("hinge_handle", depth=0.0)
+
+        # Grasp to the handle for manipulation
+        grasp_handle("hinge_handle")
+
+        # Pull along an opening arc using the lid's approximate radius (hinge body faces to the robot)
+        hinge_lid_pos = get_obj_pos("hinge_lid")
+        hinge_body_size = get_obj_size("hinge_body")
+        radius = hinge_body_size[0] # approximate radius of the hinge lid
+        move_to_position(hinge_lid_pos + np.array([radius * 0.5, 0, radius]), lift_clearance=0.0)
+
+        # Release the holding handle
+        release_handle()
+
+        """Close the hinge lid"""
+        # Move the gripper close to the hinge handle
+        move_gripper_to("hinge_handle", depth=0.0)
+
+        # Grasp the handle for manipulation
+        grasp_handle("hinge_handle")
+
+        # Push the handle toward a closing pose near the hinge body edge
+        hinge_body_pos = get_obj_pos("hinge_body")
+        hinge_body_size = get_obj_size("hinge_body")
+        target_close_pos = hinge_body_pos + hinge_body_size * np.array([-0.5, 0.0, 0.5])
+        move_to_position(target_close_pos, lift_clearance=0.0)
+
+        # Release the handle
+        release_handle()
+        ```
+
+        # Example 4 (Gripper Robot)
+
+        * Specification
+        Instruction:
+        - Open then close the prismatic drawer
+
+        Objects in scene:
+        - top_drawer, top_handle, floor, gripper
+
+        Demonstration summary:
+        - None
+
+        * Generated Code
+        ```python
+
+        """Open the prismatic drawer"""
+        # Move the gripper close to the drawer handle
+        move_gripper_to("top_handle", depth=0)
+
+        # Grasp to the handle for manipulation
+        grasp_handle("top_handle")
+
+        # Slide the drawer along its prismatic axis toward the open direction
+        drawer_size = get_obj_size("top_drawer")
+        move_amount = drawer_size[1] * 0.85  # reasonable travel to fully open
+
+        # Determine the drawer open and close direction from relative position between drawer body and handle
+        top_handle_pos = get_obj_pos("top_handle")
+        drawer_body_pos = get_obj_pos("drawer_body")
+
+        if top_handle_pos[1] > drawer_body_pos[1]:
+            open_dir, close_dir = "right", "left" # drawer is facing right
+        else:
+            open_dir, close_dir = "left", "right" # drawer is facing left
+
+        move_parallel(move_dir=open_dir, offset=move_amount)
+
+        # Release the holding handle
+        release_handle()
+
+        """Close the prismatic drawer"""
+        # Move the gripper close to the drawer handle
+        move_gripper_to("top_handle", depth=0)
+
+        # Grasp to the handle for manipulation
+        grasp_handle("top_handle")
+
+        # Slide the drawer along its prismatic axis toward the closed direction
+        drawer_size = get_obj_size("top_drawer")
+        move_amount = drawer_size[1] * 0.8  # reasonable travel to fully close
+        move_parallel(move_dir=close_dir, offset=move_amount) 
+
+        # Release the holding handle
+        release_handle()
+        ```
+
+        # Example 5 (Gripper Robot)
+
+        * Specification
+        Instruction:
+        - Sweep the white rook into the left box.
+
+        Objects in scene:
+        - white_rook, left_chess_box, floor, gripper
+
+        Demonstration summary:
+        - None
+
+        * Generated Code
+        ```python
+
+        # Get positions and size
+        box_pos = get_obj_pos("left_chess_box")
+        target_pos = get_obj_pos("white_rook")
+        obj_h = get_obj_size("white_rook")[2]
+
+        # Move gripper to white_rook from above
+        move_gripper_to("white_rook", depth=obj_h / 1.3)
+
+        # Calculate sweep distance and direction
+        goal_dist = abs(target_pos[1] - box_pos[1]) + 0.02 # add bit margin to ensure inside box
+        move_dir = "left" if target_pos[1] > box_pos[1] else "right"
+
+        # Sweep toward the box without gripping or lifting
+        move_parallel(move_dir=move_dir, offset=goal_dist)
+        ```
+
+        # Example 6 (Vacuum Suction Robot)
+
+        * Specification
+        Instruction:
+        - Pick the block
+
+        Objects in scene:
+        - blue_block, floor, gripper
+
+        Demonstration summary:
+        - None
+
+        * Generated Code
+        ```python
+
+        # Move the vacuum gripper over the blue block from above
+        blue_block_size = get_obj_size("blue_block")
+
+        move_gripper_to("blue_block", depth=blue_block_size[2] / 2)
+
+        # Attach the blue block by activating the vacuum
+        activate_vacuum()
+
+        # Lift the blue block above from current position after attaching it
+        blue_block_pos = get_obj_pos("blue_block")
+        move_to_position(pos=blue_block_pos + np.array([0, 0, 0.15]), lift_clearance=0.0)
+        ```
+
+        # Example 7 (Vacuum Suction Robot)
+
+        * Specification
+        Instruction:
+        - Drop the holding red block in the box which the blue block is in
+
+        Objects in scene:
+        - blue_block, red_block, target_box, floor, gripper
+
+        Demonstration summary:
+        - None
+
+        * Generated Code
+        ```python
+        # Assume the vacuum is already holding the red block
+
+        # Get the target box position and size
+        box_pos = get_obj_pos("target_box")
+        box_aabb = get_obj_bbox("target_box")
+
+        # Compute a drop position slightly above the top of the box
+        drop_height = box_aabb[1][2] + 0.02
+
+        # Get red block size for grid calculation
+        red_aabb = get_obj_bbox("red_block")
+        red_size = red_aabb[1] - red_aabb[0]
+        obj_w = float(red_size[0])
+        half_w = obj_w / 2.0
+
+        # Define grid positions to avoid stacking directly on blue block
+        grid_positions = [
+            (-half_w, -half_w),
+            (half_w, -half_w),
+            (-half_w, half_w),
+            (half_w, half_w),
+        ]
+
+        # Select grid position based on object index
+        cube_idx = 0  # Index for red_block
+        grid_offset = grid_positions[cube_idx % 4]
+
+        drop_pos = np.array([box_pos[0] + grid_offset[0], box_pos[1] + grid_offset[1], drop_height])
+
+        # Move the vacuum holding the block above the box
+        move_to_position(pos=drop_pos, lift_clearance=0.15)
+
+        # Release the block into the box by deactivating vacuum
+        deactivate_vacuum()
+        ```
+
+        # Example 8 (Vacuum Suction Robot)
+
+        * Specification
+        Instruction:
+        - Open then close the hinge lid
+
+        Objects in scene:
+        - hinge_lid, hinge_body, hinge_handle, floor, gripper
+
+        Demonstration summary:
+        - None
+
+        * Generated Code
+        ```python
+
+        """Open the hinge lid"""
+        # Move the vacuum gripper close to the hinge handle
+        move_gripper_to("hinge_handle", depth=0.0)
+
+        # Attach to the handle for manipulation
+        attach_vacuum_handle("hinge_handle")
+
+        # Pull along an opening arc using the lid's approximate radius (hinge body faces to the robot)
+        hinge_lid_pos = get_obj_pos("hinge_lid")
+        hinge_body_size = get_obj_size("hinge_body")
+        radius = hinge_body_size[0] # approximate radius of the hinge lid
+        move_to_position(hinge_lid_pos + np.array([radius * 0.5, 0, radius]), lift_clearance=0.0)
+
+        # Detach from the holding handle
+        detach_vacuum_handle()
+
+        """Close the hinge lid"""
+        # Move the vacuum gripper close to the hinge handle
+        move_gripper_to("hinge_handle", depth=0.0)
+
+        # Attach to the handle for manipulation
+        attach_vacuum_handle("hinge_handle")
+
+        # Push the handle toward a closing pose near the hinge body edge
+        hinge_body_pos = get_obj_pos("hinge_body")
+        hinge_body_size = get_obj_size("hinge_body")
+        target_close_pos = hinge_body_pos + hinge_body_size * np.array([-0.5, 0.0, 0.5])
+        move_to_position(target_close_pos, lift_clearance=0.0)
+
+        # Detach from the handle
+        detach_vacuum_handle()
+        ```
+
+        # Example 9 (Vacuum Suction Robot)
+
+        * Specification
+        Instruction:
+        - Open then close the prismatic drawer
+
+        Objects in scene:
+        - top_drawer, top_handle, floor, gripper
+
+        Demonstration summary:
+        - None
+
+        * Generated Code
+        ```python
+
+        """Open the prismatic drawer"""
+        # Move the vacuum gripper close to the drawer handle
+        move_gripper_to("top_handle", depth=0)
+
+        # Attach to the handle for manipulation
+        attach_vacuum_handle("top_handle")
+
+        # Slide the drawer along its prismatic axis toward the open direction
+        drawer_size = get_obj_size("top_drawer")
+        move_amount = drawer_size[1] * 0.85  # reasonable travel to fully open
+
+        # Determine the drawer open and close direction from relative position between drawer body and handle
+        top_handle_pos = get_obj_pos("top_handle")
+        drawer_body_pos = get_obj_pos("drawer_body")
+
+        if top_handle_pos[1] > drawer_body_pos[1]:
+            open_dir, close_dir = "right", "left" # drawer is facing right
+        else:
+            open_dir, close_dir = "left", "right" # drawer is facing left
+
+        move_parallel(move_dir=open_dir, offset=move_amount)
+
+        # Detach from the holding handle
+        detach_vacuum_handle()
+
+        """Close the prismatic drawer"""
+        # Move the vacuum gripper close to the drawer handle
+        move_gripper_to("top_handle", depth=0)
+
+        # Attach to the handle for manipulation
+        attach_vacuum_handle("top_handle")
+
+        # Slide the drawer along its prismatic axis toward the closed direction
+        drawer_size = get_obj_size("top_drawer")
+        move_amount = drawer_size[1] * 0.8  # reasonable travel to fully close
+        move_parallel(move_dir=close_dir, offset=move_amount)
+
+        # Detach from the holding handle
+        detach_vacuum_handle()
+        ```
+
+        # Example 10 (Vacuum Robot)
+
+        * Specification
+        Instruction:
+        - Sweep the white rook into the left box.
+
+        Objects in scene:
+        - white_rook, left_chess_box, floor, gripper
+
+        Demonstration summary:
+        - None
+
+        * Generated Code
+        ```python
+
+        # Get positions and size
+        box_pos = get_obj_pos("left_chess_box")
+        target_pos = get_obj_pos("white_rook")
+        obj_h = get_obj_size("white_rook")[2]
+
+        # Move gripper to white_rook from above
+        move_gripper_to("white_rook", depth=obj_h / 1.3)
+
+        # Since it is a vacuum robot, we must first activate the vacuum to attach to the object
+        activate_vacuum()
+
+        # Calculate sweep distance and direction
+        goal_dist = abs(target_pos[1] - box_pos[1]) + 0.02 # add bit margin to ensure inside box
+        move_dir = "left" if target_pos[1] > box_pos[1] else "right"
+
+        # Sweep toward the box without gripping or lifting
+        move_parallel(move_dir=move_dir, offset=goal_dist)
+
+        # Deactivate the vacuum to release the object
+        deactivate_vacuum()
+        ```
+
+        Now generate Python code that follows the given specification.
+
+        * Specification
+        Instruction:
+        - {instruction}
+
+        Objects in scene:
+        - {objects}
+
+        Demonstration summary:
+        {demo_summary}
+
+        * Generated Code
+

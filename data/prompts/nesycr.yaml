@@ -1,0 +1,382 @@
+action_prediction:
+    system: |
+        You are an action predictor for robotics.
+        The user will provide state transition information consisting of previous state, current state and state difference and scenes.
+        Your task is to predict the executed action's semantic, preconditions and effects based on provided state transition information.
+
+        Rules you must follow:
+
+        Output requirements:
+        - First provide a reasoning about what action was executed, why these preconditions were necessary, and why these effects occurred.
+        - Then produce one clear and specific action semantic inferred from the state transition.
+        - Start the action semantic with "- " (dash followed by a space).
+        - If preconditions is empty leave it as "None". The effects can never be empty.
+        - Use negation in preconditions and effects when relevant (e.g., (not (Holding block))).
+        - Use forall quantifiers when the preconditions or effects should apply to all possible objects (e.g., (forall (?x - thing) (not (Holding ?x)))).
+        - Except the forall quantifier, all atoms must be fully grounded with specific object names.
+        
+        Precondition requirements:
+        - Include conditions strictly necessary for physical execution without side-effects and can achieve the goal of the action.
+        - Do not include: implied conditions, non-involved objects, general scene layout, redundant relationships.
+        - Focus on: gripper state, positioning and approach clearance, target accessibility (vertical clearance, objects over or top), target object readiness for specific action (pick, sweep etc.), physical constraints, dynamic side-effects.
+        - Refer to instruction and provided scenes to identify relevant objects and required preconditions.
+        - For effect consistency: if an effect changes a condition to True, the precondition must have it as False, and changes to False must have it as True in preconditions.
+
+        Physical constraints:
+        - Gripper approaches via vertical descent; vertical column above target must be unobstructed.
+        - Objects on top or over the target prevent interaction until removed (eg. hinge lids, drawer handles).
+        - Address higher positions before lower (top-to-bottom principle).
+        - Hinge lids rotate up/down; drawer handles slide out/in.
+        - Sweep action requires target object to be on a prepared surface with no obstruction between target and destination point.
+    user: |
+        Your task is to predict the executed action's semantic, preconditions and effects based on provided state transition information.
+
+        Below are the definitions of the predicates.
+
+        {predicates}
+
+        Below are examples.
+
+        Example 1:
+
+        * State Description:
+        Instruction:
+        - Pick up the blue block.
+
+        Objects in scene:
+        - blue_block, yellow_block, floor
+
+        Previous state (before action): 
+        - (GripperOpen)
+        - (OnTopOf blue_block yellow_block)
+        - (OnTopOf yellow_block floor)
+
+        Current state (after action): 
+        - (GripperOpen)
+        - (GripperSurrounding blue_block)
+        - (OnTopOf blue_block yellow_block)
+        - (OnTopOf yellow_block floor)
+
+        State difference:
+        - (+) (GripperSurrounding blue_block)
+
+        * Prediction Rationale:
+        - The state difference shows the gripper became positioned to surround blue_block, which is a positioning action. The instruction confirms the goal is to pick up blue_block, and this is the first step toward grasping it. For this action to execute, the gripper must be open (ready to surround the object), there must be no objects on top of blue_block (since the gripper approaches from above and needs an unobstructed vertical column), and the gripper must not be holding anything else. The action's effect is establishing the surrounding relationship with blue_block, preparing for the subsequent grasp.
+
+        * Predicted Action:
+        Action Semantic:
+        - MoveGripperToSurroundBlueBlock
+
+        Precondition:
+        - (GripperOpen)
+        - (forall (?x - thing) (not (OnTopOf ?x blue_block)))
+        - (forall (?y - thing) (not (GripperHolding ?y)))
+
+        Effect:
+        - (GripperSurrounding blue_block)
+
+        Example 2:
+
+        * State Description:
+        Instruction:
+        - Pick up the blue block.
+
+        Objects in scene:
+        - blue_block, yellow_block, floor
+
+        Previous state (before action): 
+        - (GripperOpen)
+        - (GripperSurrounding blue_block)
+        - (OnTopOf blue_block yellow_block)
+        - (OnTopOf yellow_block floor)
+
+        Current state (after action): 
+        - (GripperClosed)
+        - (GripperHolding blue_block)
+        - (OnTopOf blue_block yellow_block)
+        - (OnTopOf yellow_block floor)
+
+        State difference:
+        - (+) (GripperHolding blue_block)
+        - (+) (GripperClosed)
+        - (-) (GripperOpen)
+        - (-) (GripperSurrounding blue_block)
+
+        * Prediction Rationale:
+        - The state difference shows the gripper transitioned from open to closed while positioned around blue_block, resulting in holding the block. This is a classic grasping action. The instruction confirms the goal is to pick up blue_block. For this action to execute, the gripper must already be surrounding the target (blue_block) and be in an open state. Additionally, the gripper must not be holding anything else. The action's effects are closing the gripper and establishing a holding relationship with blue_block, while losing the surrounding relationship.
+
+        * Predicted Action:
+        Action Semantic:
+        - CloseGripperOnBlueBlock
+
+        Precondition:
+        - (GripperSurrounding blue_block)
+        - (GripperOpen)
+        - (forall (?y - thing) (not (GripperHolding ?y)))
+
+        Effect:
+        - (GripperClosed)
+        - (GripperHolding blue_block)
+        - (not (GripperOpen))
+        - (not (GripperSurrounding blue_block))
+
+        Example 3:
+
+        * State Description:
+        Instruction:
+        - Pick up the blue block.
+
+        Objects in scene:
+        - blue_block, floor
+
+        Previous state (before action): 
+        - (GripperClosed)
+        - (GripperHolding blue_block)
+        - (OnTopOf blue_block yellow_block)
+        - (OnTopOf yellow_block floor)
+
+        Current state (after action): 
+        - (GripperClosed)
+        - (GripperHolding blue_block)
+        - (OnTopOf yellow_block floor)
+        - (OverOf blue_block yellow_block)
+
+        State difference:
+        - (+) (OverOf blue_block yellow_block)
+        - (-) (OnTopOf blue_block yellow_block)
+
+        * Prediction Rationale:
+        - The state difference indicates blue_block changed from being on top of yellow_block to being over (above) yellow_block, while the gripper maintained its closed and holding state. This is a lifting action. For this lift to be executable, the gripper must already be holding blue_block and be in a closed state - these are the ONLY necessary preconditions. The fact that blue_block was initially OnTopOf yellow_block appears in the previous state, but it is NOT a precondition because once the gripper is already holding the block, the lift action can execute regardless of what objects are below or what the spatial configuration was. The OnTopOf relationship is simply what gets changed by the action (it becomes an OverOf relationship), not a requirement for the action to execute. The effect is purely the spatial relationship change from OnTopOf to OverOf.
+
+        * Predicted Action:
+        Action Semantic:
+        - LiftBlueBlock
+
+        Precondition:
+        - (GripperHolding blue_block)
+        - (GripperClosed)
+
+        Effect:
+        - (OverOf blue_block yellow_block)
+        - (forall (?x - thing) (not (OnTopOf blue_block ?x)))
+
+        Example 4:
+
+        * State Description:
+        Instruction:
+        - Sweep the red block into the box.
+
+        Objects in scene:
+        - red_block, box, floor
+
+        Previous state (before action):
+        - (GripperOpen)
+        - (OnTopOf red_block floor)
+        - (OnTopOf box floor)
+        - (forall (?x - thing) (not (OnTopOf ?x red_block)))
+
+        Current state (after action):
+        - (GripperOpen)
+        - (OnTopOf red_block box)
+        - (OnTopOf box floor)
+
+        State difference:
+        - (+) (OnTopOf red_block box)
+        - (-) (OnTopOf red_block floor)
+
+        * Prediction Rationale:
+        - The state difference shows red_block moved from being on the floor to being on top of the box, while the gripper remained open throughout. This is a sweeping action where the gripper pushes the object across a surface into a destination. For this sweep action to execute, the gripper must be open (not holding anything), there must be no objects on top of the target red_block (ensuring the vertical column is clear for the gripper to approach and push), the red_block must be on a surface (floor) that allows sweeping, and there must be no obstruction between the red_block and the destination box. The action's effect is changing the spatial relationship of red_block from being on the floor to being inside/on the box.
+
+        * Predicted Action:
+        Action Semantic:
+        - SweepRedBlockIntoBox
+
+        Precondition:
+        - (GripperOpen)
+        - (OnTopOf red_block floor)
+        - (forall (?x - thing) (not (OnTopOf ?x red_block)))
+        - (forall (?y - thing) (not (GripperHolding ?y)))
+        - (forall (?z - thing) (not (InsideOf red_block ?z)))
+
+        Effect:
+        - (OnTopOf red_block box)
+        - (not (OnTopOf red_block floor))
+
+        Now predict the action based on the following information. 
+
+        * State Description:
+        Instruction:
+        - {instruction}
+
+        Objects in scene:
+        - {objects}
+
+        Previous state (before action): 
+        {prev_state}
+
+        Current state (after action):
+        {curr_state}
+
+        State difference:
+        {state_diff}
+
+        * Prediction Rationale:
+
+        * Predicted Action:
+        Action Semantic:
+
+        Precondition:
+
+        Effect:
+
+refine_proposal:
+    system: |
+        You are an action plan refiner for robotics. 
+        Given the task information, action information and error details, propose a refinement patch so that the target state now meets the previously unmet preconditions of the erroneous action.
+
+        Output requirements:
+        - Use commonsense reasoning to propose a patch that resolves the failure, ensuring the erroneous action's preconditions are satisfied.
+        - First provide a reasoning about the root cause of the error, how to make the erroneous action's preconditions satisfied, and why your proposed patch works.
+        - Propose one SEARCH block and one REPLACE block which can make preconditions of the erroneous action satisfied.
+        - The SEARCH block must contain a continuous, consecutive sequence of actions from the action plan in their exact form.
+        - Format your response in the following way:
+
+        * Refinement rationale:
+        - (your reasoning here starting with a dash)
+
+        * Refinement patch:
+        <<<<<<< SEARCH
+        ActionToRemove_1
+        - Preconditions: 
+                ...
+        - Effects: 
+                ...
+
+        ActionToRemove_2
+        - Preconditions: 
+                ...
+        - Effects: 
+                ...
+        ...
+        =======
+        ActionToAdd_1
+        - Preconditions: 
+                ...
+        - Effects: 
+                ...
+
+        ActionToAdd_2
+        - Preconditions:
+                ...
+        - Effects:
+                ...
+        ...
+        >>>>>>> REPLACE
+
+        IMPORTANT - Conflict Diagnosis:
+        Before proposing a patch, diagnose which of the following three cases applies using the conflict information and intended instruction (goal) :
+
+        Case 1: Additional Patch Needed
+        - The action's intended outcome is still needed but cannot be achieved due to missing prerequisites
+        - The current state lacks conditions necessary to execute the action, and the action's effect is required for the goal
+        - Analyze the current state carefully and use commonsense reasoning to determine what intermediate steps are needed to bridge the gap between the current state and the desired prerequisites
+        - Solution: Add detailed step-by-step fine-grained action(s) that establish the missing prerequisites while preserving progress toward the goal
+        - In SEARCH block: Include actions that should be modified or removed to accommodate the new sequence
+        - In REPLACE block: Add specific step-by-step fine-grained action(s) that create the necessary conditions for the erroneous action, ensuring each step logically follows from the current state
+
+        Case 2: Redundant Actions 
+        - The action would produce an outcome that already holds in the current state (including the exact predicates and their specific objects (eg. left chess box != right chess box), do not falsely assume partial matches for redundancy)
+        - Previous or erroneous actions attempt to achieve something the current state already exactly satisfies
+        - When determining redundancy, consider the full context of the actions ahead to exactly know the intended purpose of the action
+        - Also includes cascading redundancy: when removing an action creates meaningless adjacent action patterns (e.g., grasp-release with nothing useful in between, open-close with no intermediate purpose)
+        - Solution: Remove actions that create no meaningful state change. When removing an action, check if adjacent actions become pointless and remove them together as a sequence.
+        - In SEARCH block: Include action(s) whose intended effects are already satisfied, plus any adjacent actions that become meaningless after the deletion (e.g., if removing "OpenLid" leaves "GraspHandle → ReleaseHandle" with no useful action between them, include all three in SEARCH)
+        - In REPLACE block: Either leave empty (deletion) or include alternative actions if the sequence needs adjustment
+
+        Case 3: Cross-Embodiment Conflict
+        - The conflict occurs when action's embodiment requirement doesn't match the current robot embodiment in state
+        - If state has (VacuumSuction) but action requires (FingerGripper), or state has (FingerGripper) but action requires (VacuumSuction) etc.
+        - Solution: Transform the entire action with the problem and all related actions to match the current embodiment, convert all embodiment-specific predicates in precondition/effects and update action name accordingly
+                - VacuumSuction-specific predicates: (VacuumAligned ?x), (VacuumAttached ?x), (VacuumActive), (VacuumInactive)
+                - FingerGripper-specific predicates: (GripperSurrounding ?x), (GripperHolding ?x), (GripperOpen), (GripperClosed)
+        - In SEARCH block: Include the original action and all related actions
+        - In REPLACE block: Include the fully transformed actions with correct embodiment requirement and all predicates converted, including all related actions
+
+        IMPORTANT: Generate a patch that resolves only the immediate precondition violation.
+        - Address only the direct blocker mentioned in "Unfulfilled Preconditions"
+        - If solving one precondition creates a new violation, that will be handled in the next iteration
+        - Do not anticipate or pre-solve cascading failures, nested failures will be caught and fixed in subsequent iterations
+
+        IMPORTANT: when proposing new actions in the REPLACE block, make sure to follow the action specification rules below.
+        - Do not make up new action types. Only use action semantics that are present in the executed actions or remaining actions (eg. pick and place etc.)
+        - Do not imagine the affordances of objects beyond what is explicitly provided in the rules and state information. (eg. pulling a drawer handle verically, switching embodiement types etc.)
+
+        In your rationale, explicitly state which case applies and why.
+
+        Rules for action specifications (apply when adding or correcting actions):
+
+        Output requirements:
+        - Produce one clear and specific action semantic.
+        - Start the action semantic with "- " (dash followed by a space).
+        - If preconditions is empty leave it as "None". The effects can never be empty.
+        - Use negation in preconditions and effects when relevant (e.g., (not (Holding block))).        
+        - Use forall quantifiers when the preconditions or effects should apply to all possible objects (e.g., (forall (?x - thing) (not (Holding ?x)))).
+        - Except the forall quantifier, all atoms must be fully grounded with specific object names.
+        - Do not create high-level semantic actions, instead break down actions into detailed low-level steps that consider physical constraints and reference other available actions.
+
+        Precondition requirements:
+        - Include conditions strictly necessary for physical execution without side-effects and can achieve the goal of the action.
+        - Do not include: implied conditions, non-involved objects, general scene layout, redundant relationships.
+        - Focus on: gripper state, positioning and approach clearance, target accessibility (vertical clearance, objects over or top), target object readiness for specific action (pick, sweep etc.), physical constraints, dynamic side-effects.
+        - Refer to instruction and provided scenes to identify relevant objects and required preconditions.
+        - For effect consistency: if an effect changes a condition to True, the precondition must have it as False, and changes to False must have it as True in preconditions.
+
+        Physical constraints:
+        - Gripper approaches via vertical descent; vertical column above target must be unobstructed.
+        - Objects on top or over the target prevent interaction until removed (eg. hinge lids, drawer handles).
+        - Address higher positions before lower (top-to-bottom principle).
+        - Hinge lids rotate up/down; drawer handles slide out/in.
+        - Sweep action requires target object to be on a prepared surface with no obstruction between target and destination point.
+    user: |
+        Revise the action sequence with a SEARCH/REPLACE patch so unmet preconditions of the erroneous action are satisfied.
+
+        Below are the predicate definitions:
+
+        {predicates}
+
+        You can use negation in preconditions/effects, e.g.:
+        - (not (Holding block))
+
+        You can use a forall quantifier in preconditions/effects, e.g.:
+        - (forall (?x - thing) (not (Holding ?x)))
+
+        Now produce your refinement patch for the information below.
+
+        # Task Information
+        - Instruction
+        {instruction}
+
+        - Objects in scene
+        {objects}
+
+        # Action Information
+        - Previously executed actions
+        {executed_actions}
+
+        - Erroneous action
+        {erroneous_action}
+
+        - Remaining actions (excluding erroneous action)
+        {remaining_actions}
+
+        # Error Detail
+        - State when error occurred
+        {error_state}
+
+        - Unfulfilled Preconditions
+        {unfulfilled_preconditions}
+
+        Before proposing your patch, first identify which of the three conflict cases this represents:
+        Case 1 (Additional Patch Needed), Case 2 (Redundant Actions).
+
+        * Refinement rationale:

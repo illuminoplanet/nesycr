@@ -1,0 +1,24 @@
+<mujoco model="black_chess_box">
+  <asset>
+    <material name="black" rgba="0 0 0 1"/>
+  </asset>
+
+  <worldbody>
+    <body name="box_base">
+      <!-- Bottom -->
+      <geom type="box" size="0.08 0.04 0.0015" pos="0 0 0" material="black"/>
+
+      <!-- Left wall -->
+      <geom type="box" size="0.0015 0.04 0.0115" pos="-0.0785 0 0.0115" material="black"/>
+
+      <!-- Right wall -->
+      <geom type="box" size="0.0015 0.04 0.0115" pos="0.0785 0 0.0115" material="black"/>
+
+      <!-- Front wall -->
+      <geom type="box" size="0.08 0.0015 0.0115" pos="0 -0.0385 0.0115" material="black"/>
+
+      <!-- Back wall -->
+      <geom type="box" size="0.08 0.0015 0.0115" pos="0 0.0385 0.0115" material="black"/>
+    </body>
+  </worldbody>
+</mujoco>
