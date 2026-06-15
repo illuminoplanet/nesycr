@@ -126,7 +126,7 @@ Released under the [MIT License](LICENSE). Third-party assets in `assets/`
 remain under their respective upstream licenses.
 
 ## Citation
-
+ 
 ```bibtex
 @inproceedings{kim2026cross,
   title={Cross-Domain Demo-to-Code via Neurosymbolic Counterfactual Reasoning},
