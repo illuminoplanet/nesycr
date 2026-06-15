@@ -1,4 +1,4 @@
-<h1 align="left">[CVPR 2026] Neurosymbolic Counterfactual Reasoning (NeSyCR)</h1>
+<h2 align="left">[CVPR 2026] Neurosymbolic Counterfactual Reasoning (NeSyCR)</h2>
 
 <p align="center">
   <img src="docs/teaser.png" alt="NeSyCR" width="90%">
