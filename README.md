@@ -1,7 +1,17 @@
-# NeSyCR
+<h1 align="center">NeSyCR</h1>
 
-Official implementation of **"Cross-Domain Demo-to-Code via Neurosymbolic
-Counterfactual Reasoning"** (CVPR 2026).
+<p align="center">
+  <img src="docs/teaser.png" alt="NeSyCR" width="90%">
+</p>
+
+<p align="center">
+  This is an official implementation for the CVPR 2026 paper:<br>
+  <b>Cross-Domain Demo-to-Code via Neurosymbolic Counterfactual Reasoning</b>
+</p>
+
+<p align="center">
+  Jooyoung Kim &middot; Wonje Choi &middot; Younguk Song &middot; Honguk Woo
+</p>
 
 Given a demonstration in a *source* environment, the agent induces a symbolic
 task specification and, through neurosymbolic counterfactual reasoning, adapts
